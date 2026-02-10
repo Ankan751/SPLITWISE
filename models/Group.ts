@@ -5,8 +5,7 @@ const GroupSchema = new Schema(
   {
     name: { type: String, required: true },
     createdBy: { type: Types.ObjectId, ref: "User", required: true },
-    token: { type: String, required: true, unique: true }, // for sharing,
-    members: [{ type: Types.ObjectId, ref: "User" }], // denormalized for quick access
+    token: { type: String, required: true, unique: true }, // for sharing
   },
   { timestamps: true }
 );
