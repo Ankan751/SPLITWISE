@@ -7,55 +7,86 @@ import mongoose from "mongoose";
 import { notFound, redirect } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 
-export default async function GroupPage(props: any) {
+interface UserRecord {
+  _id: mongoose.Types.ObjectId;
+  name: string;
+  email: string;
+  image?: string;
+}
 
-  // ✅ NEXT 15/16 FIX — unwrap params FIRST
-  const params = await props.params;
-  const groupId = params?.groupId;
+interface GroupRecord {
+  _id: mongoose.Types.ObjectId;
+  name: string;
+  token: string;
+  createdBy: mongoose.Types.ObjectId;
+}
 
-  // ✅ Prevent Mongo crash
+type MemberRole = "admin" | "member";
+
+interface GroupMemberRecord {
+  _id: mongoose.Types.ObjectId;
+  groupId: mongoose.Types.ObjectId;
+  userId: mongoose.Types.ObjectId;
+  role: MemberRole;
+  joinedAt: Date;
+}
+
+interface GroupMemberWithUserRecord {
+  _id: mongoose.Types.ObjectId;
+  groupId: mongoose.Types.ObjectId;
+  userId: Pick<UserRecord, "name" | "email" | "image"> | null;
+  role: MemberRole;
+  joinedAt: Date;
+}
+
+export default async function GroupPage({
+  params,
+}: {
+  params: Promise<{ groupId: string }>;
+}) {
+  const { groupId } = await params;
+
   if (!groupId || !mongoose.Types.ObjectId.isValid(groupId)) {
     return notFound();
   }
 
   const session = await auth();
 
-  // ✅ Block unauthenticated users
   if (!session?.user?.email) {
     redirect("/api/auth/signin");
   }
 
   await connectToDatabase();
 
-  // ✅ Parallel queries (FASTER)
   const [dbUser, group] = await Promise.all([
-    User.findOne({ email: session.user.email }),
-    Group.findById(groupId),
+    User.findOne({ email: session.user.email }).lean<UserRecord | null>(),
+    Group.findById(groupId).lean<GroupRecord | null>(),
   ]);
 
   if (!dbUser) return notFound();
   if (!group) return notFound();
 
-  // ✅ SECURITY — verify membership
   const membership = await GroupMember.findOne({
     groupId,
     userId: dbUser._id,
-  });
+  }).lean<GroupMemberRecord | null>();
 
   if (!membership) {
-    return notFound(); // hides group existence
+    return notFound();
   }
 
-  // ✅ Fetch members
   const members = await GroupMember.find({
     groupId,
-  }).populate("userId", "name email image");
+  })
+    .populate<{ userId: GroupMemberWithUserRecord["userId"] }>(
+      "userId",
+      "name email image"
+    )
+    .lean<GroupMemberWithUserRecord[]>();
 
   return (
     <div className="min-h-screen bg-gray-100 p-10">
       <div className="max-w-4xl mx-auto space-y-6">
-
-        {/* GROUP HEADER */}
         <Card className="rounded-2xl shadow-lg">
           <CardContent className="p-6">
             <h1 className="text-3xl font-bold">{group.name}</h1>
@@ -76,7 +107,6 @@ export default async function GroupPage(props: any) {
           </CardContent>
         </Card>
 
-        {/* MEMBERS */}
         <Card className="rounded-2xl shadow-lg">
           <CardContent className="p-6">
             <h2 className="text-xl font-semibold mb-4">
@@ -84,18 +114,16 @@ export default async function GroupPage(props: any) {
             </h2>
 
             <div className="space-y-3">
-              {members.map((member: any) => (
+              {members.map((member) => (
                 <div
-                  key={member._id}
-                  className="flex items-center justify-between bg-gray-50 p-4 rounded-lg"
+                  key={member._id.toString()}
+                  className="flex items-center justify-between bg-gray-50 p-4 rounded-lg "
                 >
                   <div>
                     <p className="font-medium text-lg">
                       {member.userId?.name ?? "Unnamed User"}
                     </p>
-                    <p className="text-sm text-gray-500">
-                      {member.userId?.email}
-                    </p>
+                    <p className="text-sm text-gray-500">{member.userId?.email}</p>
                   </div>
 
                   <span className="text-sm bg-black text-white px-3 py-1 rounded-full">
@@ -106,7 +134,6 @@ export default async function GroupPage(props: any) {
             </div>
           </CardContent>
         </Card>
-
       </div>
     </div>
   );
