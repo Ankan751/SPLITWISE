@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -17,7 +17,20 @@ type User = {
   email?: string | null;
 };
 
-export default function DashboardClient({ user }: { user?: User | null }) {
+type GroupType = {
+  _id: string;
+  name: string;
+};
+
+type DashboardProps = {
+  user?: User | null;
+  groups: GroupType[];
+};
+
+export default function DashboardClient({
+  user,
+  groups,
+}: DashboardProps) {
   const router = useRouter();
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -28,7 +41,7 @@ export default function DashboardClient({ user }: { user?: User | null }) {
   const [notification, setNotification] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // ---------- CREATE GROUP ----------
+  // ---------------- CREATE GROUP ----------------
 
   const confirmGroupCreation = async () => {
     if (!groupName.trim()) return;
@@ -41,18 +54,15 @@ export default function DashboardClient({ user }: { user?: User | null }) {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          groupName,
-        }),
+        body: JSON.stringify({ groupName }),
       });
 
       if (!res.ok) throw new Error("Failed to create group");
 
-      const group = await res.json();
+      const data = await res.json();
 
-      setJoinLink(group.joinLink);
-
-      setNotification(`${groupName} created successfully 🎉`);
+      setJoinLink(data.joinLink);
+      setNotification("Group created successfully 🎉");
 
     } catch (err) {
       console.error(err);
@@ -73,7 +83,7 @@ export default function DashboardClient({ user }: { user?: User | null }) {
     }
   };
 
-  // ---------- JOIN GROUP (Manual Token Optional) ----------
+  // ---------------- JOIN GROUP ----------------
 
   const joinGroup = async () => {
     if (!token.trim()) return;
@@ -95,8 +105,6 @@ export default function DashboardClient({ user }: { user?: User | null }) {
         throw new Error("Invalid token");
       }
 
-      setNotification("Joined group successfully 🎉");
-
       setJoinOpen(false);
       setToken("");
 
@@ -113,105 +121,141 @@ export default function DashboardClient({ user }: { user?: User | null }) {
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <p className="text-gray-500">Loading user...</p>
+        <p className="text-muted-foreground">Loading user...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 gap-4">
-      {notification && (
-        <div className="bg-green-600 text-white px-6 py-3 rounded-xl shadow-lg">
-          {notification}
-        </div>
-      )}
+    <div className="min-h-screen bg-muted/40 py-10 px-4 space-y-6">
+      <div className="max-w-3xl mx-auto space-y-6">
 
-      <Card className="w-[500px] shadow-xl rounded-2xl">
-        <CardContent className="p-8 space-y-6">
-          <div className="text-center">
-            <h1 className="text-3xl font-bold">
-              Welcome, {user.name ?? "User"}
-            </h1>
-            <p className="text-gray-500">{user.email ?? ""}</p>
+        {/* Notification */}
+        {notification && (
+          <div className="bg-green-600 text-white px-6 py-3 rounded-xl shadow">
+            {notification}
           </div>
+        )}
 
-          {/* CREATE GROUP */}
+        {/* Welcome Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-2xl">
+              Welcome, {user.name ?? "User"}
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              {user.email ?? ""}
+            </p>
+          </CardHeader>
+        </Card>
+
+        {/* Groups List */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Your Groups</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {groups.length === 0 && (
+              <p className="text-muted-foreground text-sm">
+                You are not part of any groups yet.
+              </p>
+            )}
+
+            {groups.map((group) => (
+              <div
+                key={group._id}
+                onClick={() => router.push(`/group/${group._id}`)}
+                className="p-4 border rounded-xl cursor-pointer hover:bg-muted transition"
+              >
+                {group.name}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        {/* Actions */}
+        <div className="flex gap-4">
           <Button
+            className="flex-1"
             onClick={() => setCreateOpen(true)}
-            className="w-full text-lg py-6"
           >
-            Create a Group
+            Create Group
           </Button>
 
-          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Create New Group</DialogTitle>
-              </DialogHeader>
-
-              <div className="space-y-4">
-                <Input
-                  placeholder="Enter group name"
-                  value={groupName}
-                  onChange={(e) => setGroupName(e.target.value)}
-                />
-
-                <Button
-                  className="w-full"
-                  onClick={confirmGroupCreation}
-                  disabled={loading}
-                >
-                  {loading ? "Creating..." : "Create Group"}
-                </Button>
-
-                {joinLink && (
-                  <>
-                    <p className="text-sm text-gray-500">
-                      Share this invite link:
-                    </p>
-
-                    <div className="p-3 bg-gray-100 rounded-lg font-mono break-all">
-                      {joinLink}
-                    </div>
-
-                    <Button className="w-full" onClick={copyLink}>
-                      Copy Invite Link
-                    </Button>
-                  </>
-                )}
-              </div>
-            </DialogContent>
-          </Dialog>
-
-          {/* JOIN GROUP (Manual Token Fallback) */}
           <Button
             variant="outline"
-            className="w-full text-lg py-6"
+            className="flex-1"
             onClick={() => setJoinOpen(true)}
           >
-            Join a Group
+            Join Group
           </Button>
+        </div>
+      </div>
 
-          <Dialog open={joinOpen} onOpenChange={setJoinOpen}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Join Group</DialogTitle>
-              </DialogHeader>
+      {/* ---------------- CREATE GROUP DIALOG ---------------- */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create New Group</DialogTitle>
+          </DialogHeader>
 
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Enter group token"
-                  value={token}
-                  onChange={(e) => setToken(e.target.value)}
-                />
-                <Button onClick={joinGroup} disabled={loading}>
-                  {loading ? "Joining..." : "Join"}
+          <div className="space-y-4">
+            <Input
+              placeholder="Enter group name"
+              value={groupName}
+              onChange={(e) => setGroupName(e.target.value)}
+            />
+
+            <Button
+              className="w-full"
+              onClick={confirmGroupCreation}
+              disabled={loading}
+            >
+              {loading ? "Creating..." : "Create Group"}
+            </Button>
+
+            {joinLink && (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  Share this invite link:
+                </p>
+
+                <div className="p-3 bg-muted rounded-lg text-sm break-all">
+                  {joinLink}
+                </div>
+
+                <Button
+                  variant="secondary"
+                  className="w-full"
+                  onClick={copyLink}
+                >
+                  Copy Invite Link
                 </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-        </CardContent>
-      </Card>
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ---------------- JOIN GROUP DIALOG ---------------- */}
+      <Dialog open={joinOpen} onOpenChange={setJoinOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Join Group</DialogTitle>
+          </DialogHeader>
+
+          <div className="flex gap-2">
+            <Input
+              placeholder="Enter group token"
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+            />
+            <Button onClick={joinGroup} disabled={loading}>
+              {loading ? "Joining..." : "Join"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

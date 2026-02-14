@@ -1,4 +1,3 @@
-
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { connectToDatabase } from "@/lib/db";
@@ -7,6 +6,7 @@ import GroupMember from "@/models/GroupMember";
 import LedgerEntry from "@/models/LedgerEntry";
 import User from "@/models/User";
 import { Types } from "mongoose";
+import GroupClient from "../[groupId]/GroupClient";
 
 export default async function GroupPage(props: {
   params: Promise<{ groupId: string }>;
@@ -17,29 +17,35 @@ export default async function GroupPage(props: {
   if (!session?.user?.email) redirect("/");
 
   if (!Types.ObjectId.isValid(groupId)) {
-    return <div>Invalid group</div>;
+    return <div className="p-8">Invalid group</div>;
   }
 
   await connectToDatabase();
 
-  const user = await User.findOne({ email: session.user.email });
-  if (!user) return <div>User not found</div>;
+  const user = await User.findOne({
+    email: session.user.email,
+  }).lean();
+
+  if (!user) redirect("/");
 
   const objectId = new Types.ObjectId(groupId);
 
   const membership = await GroupMember.findOne({
     groupId: objectId,
     userId: user._id,
-  });
+  }).lean();
 
-  if (!membership) return <div>Not allowed</div>;
+  if (!membership) {
+    return <div className="p-8">Not allowed</div>;
+  }
 
-  const group = await Group.findById(objectId);
+  const group = await Group.findById(objectId).lean();
 
   const members = await GroupMember.find({ groupId: objectId })
-    .populate("userId", "name email");
+    .populate("userId", "name email")
+    .lean();
 
-  const balances = await LedgerEntry.aggregate([
+  const balancesAgg = await LedgerEntry.aggregate([
     { $match: { groupId: objectId } },
     {
       $group: {
@@ -49,24 +55,28 @@ export default async function GroupPage(props: {
     },
   ]);
 
+  const balancesMap: Record<string, number> = {};
+  balancesAgg.forEach((b) => {
+    balancesMap[b._id.toString()] = b.balance;
+  });
+
+  const formattedMembers = members.map((m: any) => ({
+    _id: m._id.toString(),
+    role: m.role,
+    name: m.userId.name,
+    email: m.userId.email,
+    userId: m.userId._id.toString(),
+    balance: balancesMap[m.userId._id.toString()] || 0,
+  }));
+
   return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold">{group?.name}</h1>
-      {members.map((member: any) => {
-        const balanceObj = balances.find(
-          (b: any) =>
-            b._id.toString() === member.userId._id.toString()
-        );
-
-        const balance = balanceObj ? balanceObj.balance : 0;
-
-        return (
-          <div key={member._id} className="flex justify-between">
-            <span>{member.userId.name}</span>
-            <span>₹ {(balance / 100).toFixed(2)}</span>
-          </div>
-        );
-      })}
-    </div>
+    <GroupClient
+      group={{
+        _id: group?._id.toString(),
+        name: group?.name,
+      }}
+      currentUserId={user._id.toString()}
+      members={formattedMembers}
+    />
   );
 }
